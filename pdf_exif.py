@@ -57,7 +57,7 @@ class MyMain(Gtk.Window):
         self.app = root
         self.set_title(self.app.name)
 
-        ## pegar uma imagem qq de network ##Open
+        ## pegar uma imagem qq de python ##Open
         out = commands.getoutput("locate python | grep '/usr/share' | grep '.png' ")
         out = out.split('\n')
         print out[0];
@@ -93,9 +93,11 @@ class MyMain(Gtk.Window):
 
     def createGrid(self):
         if(hasattr(self,'grid')):
-            del self.grid
-            del self.itensDaLista
+            self.grid.destroy()
+            #del self.grid
             print('limpar grid')
+        if(hasattr(self,'itensDaLista')):
+            del self.itensDaLista
             
         self.grid = Gtk.Grid()
         self.grid.show();
@@ -104,65 +106,116 @@ class MyMain(Gtk.Window):
         self.titulo = Gtk.Label("Ferramenta Exif Tool Python")
         self.titulo.show()
         self.grid.attach(self.titulo,0,0,2,1)
-        
-        self.itensDaLista = []
 
     def abrirArquivo(self,filename):
+        #TODO verificar se não tem arquivo aberto
+        if(hasattr(self,'itensDaLista')):
+            print "unsaved changes lost, because no confirm dialog yet"
+        
         self.createGrid();
         
         print("Abrir arquivo",filename);
         self.titulo.set_text("Ferramenta Exif Tool Python")
 
         self.arrExifList = self.getExifInfoFromFile(filename)
-
-        lineNum = 0
+        
+        self.itensDaLista = {}
 
         for line in self.arrExifList:
             if(line):
-                lineNum = lineNum + 1
-                print(line,lineNum)
-                if(line == '---- ExifTool ----'):
-                    doPrint = False
-                elif(line == '---- System ----'):
-                    doPrint = False
-                elif(line[:2] == '--'):
-                    doPrint = True
-                    lbl = Gtk.Label(line)
-                    lbl.show()
-                    self.grid.attach(lbl,0,lineNum,2,1)
-                elif(doPrint):
-                    charNum = line.find(':')
-                    sub1 = line[:charNum]
-                    sub1 = sub1.strip()
-
-                    lbl = Gtk.Label(sub1)
-                    lbl.show()
-                    self.grid.attach(lbl,0,lineNum,1,1)
+                # print('line=> ',line)
+                ## procurar grupo pelo indicador ']'
+                charNumGroup = line.find(']')    
+                group = line[1:charNumGroup]
+                
+                ## verificar se o grupo nao é de sistema
+                if not (group in ['ExifTool','System','File']):
                     
-                    set_list(self.itensDaLista, lineNum, sub1)
-
+                    ## se no existe, add na lista
+                    if not group in self.itensDaLista:
+                        self.itensDaLista[group] = []
+                        
+                    obj = {}
+                
+                    charNum = line.find(':')
+                    sub1 = line[charNumGroup+1:charNum]
+                    sub1 = sub1.strip()
+                    
+                    obj['tag'] = sub1;
+                    
                     sub2 = line[charNum+1:]
                     sub2 = sub2.strip()
-                    ta = Gtk.Entry()
-                    ta.set_text(sub2)
-                    ta.show()
-                    self.grid.attach(ta,1,lineNum,1,1)
-
-        #ativar botao fechar
-        self.botoes.btnClose.set_sensitive(True)
-        #ativr botao salvar
-        self.botoes.btnSave.set_sensitive(True)
+                    
+                    obj['string'] = sub2
+                    
+                    obj['status'] = 'original'
+                    
+                    #print(obj)                    
+                    
+                    self.itensDaLista[group].append(obj)
+                #end if grupo
+            #end if line
+        #end for
+        
+        print(self.itensDaLista[group])
+        
+        self.createScreen()        
+    #end def abrirArquivo
 
     def getExifInfoFromFile(self,theFile):
         #print(theFile)
         if(theFile):
-            exiflist = check_output([ 'exiftool', '-s',  '-a','-u','-g1', theFile ])
+            exiflist = check_output([ 'exiftool', '-G',  '-a','-u', theFile ])
             arrExifList = exiflist.split("\n")
             #print(arrExifList)
             arquivoPdf = theFile;
             return arrExifList
         return ''
 
+    def createScreen(self):
+        lineNum = 1;
+        
+        for group in self.itensDaLista:
+            itemIndex = -1;
+            for obj in self.itensDaLista[group]:
+                print(obj)
+                
+                itemIndex = itemIndex + 1
+                lineNum = lineNum + 1
+                
+                sub1 = obj['tag']
+                sub2 = obj['string']
+                
+                lbl = Gtk.Label(sub1)
+                lbl.show()
+                self.grid.attach(lbl,0,lineNum,1,1)
+                
+                ta = Gtk.Entry()
+                ta.set_text(sub2)
+                ta.show()
+                self.grid.attach(ta,1,lineNum,1,1)
+                
+                imgClear = Gtk.Image()
+                imgClear.set_from_stock(Gtk.STOCK_CLEAR, Gtk.IconSize.BUTTON)
+                
+                btnDelete = Gtk.Button()
+                btnDelete.set_image(imgClear)
+                btnDelete.show()
+                btnDelete.connect("clicked", self.clearTa,ta)
+                self.grid.attach(btnDelete,2,lineNum,1,1)
+                
+                self.itensDaLista[group][itemIndex]['ta'] = ta
+                
+            # end for group
+        #end for of all groups
+                
+        #ativar botao fechar
+        self.botoes.btnClose.set_sensitive(True)
+        #ativr botao salvar
+        self.botoes.btnSave.set_sensitive(True)
+            
+    def clearTa(self,button,ta):
+        ta.set_text('')
 
     def add_file_menu_actions(self, action_group):
         action_filemenu = Gtk.Action("FileMenu", "Arquivo", None, None)
@@ -229,7 +282,10 @@ class MyMain(Gtk.Window):
         fn.destroy()
 
     def on_menu_file_close(self, widget):
-        print('TODO confirm close whiout save')
+        #TODO confirm close whiout save
+        if(self.verifyUnsavedChanges()):
+            print "unsaved changes lost, because no confirm dialog yet"
+        
         self.createGrid();
         arquivoPdf = ''
         #desativar botao fechar
@@ -237,8 +293,21 @@ class MyMain(Gtk.Window):
         #desativar botao salvar
         self.botoes.btnSave.set_sensitive(False)
 
+    def verifyUnsavedChanges(self):
+        for group in self.itensDaLista:
+            itemIndex = -1;
+            for obj in self.itensDaLista[group]:
+                if obj['string'] != obj['ta'].get_text():
+                    return True
+                #end if
+            #end for group
+        #end for groups
+        return False 
+
     def on_menu_file_save(self, widget):
         print("A File|Save menu item was selected.")
+        #TODO not implemented yet
+        print "NOP! I Wont Save, because reasons..."
 
     def on_menu_file_quit(self, widget):
         Gtk.main_quit()
