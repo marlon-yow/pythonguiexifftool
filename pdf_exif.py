@@ -103,63 +103,66 @@ class MyMain(Gtk.Window):
         self.grid.show();
         self.bigGrid.attach(self.grid,0,1,1,1)
 
-        self.titulo = Gtk.Label("Ferramenta Exif Tool Python")
+        self.titulo = Gtk.Label("Ferramenta ExifTool Python")
         self.titulo.show()
         self.grid.attach(self.titulo,0,0,2,1)
 
     def abrirArquivo(self,filename):
-        #TODO verificar se não tem arquivo aberto
+        response = True
         if(hasattr(self,'itensDaLista')):
-            print "unsaved changes lost, because no confirm dialog yet"
-        
-        self.createGrid();
-        
-        print("Abrir arquivo",filename);
-        self.titulo.set_text("Ferramenta Exif Tool Python")
+            if(self.verifyUnsavedChanges()):
+                response = self.confirmDialog("Unsaved changes","Unsaved changes will be lost 4 ever. U Sure?");
+            
+        if(response):        
+            self.createGrid();
+            
+            #print("Abrir arquivo",filename);
+            self.titulo.set_text("Ferramenta Exif Tool Python")
+            #raw data
+            self.arrExifList = self.getExifInfoFromFile(filename)
+            #here goes organized data {tag,string,status,ta}
+            self.itensDaLista = {}
 
-        self.arrExifList = self.getExifInfoFromFile(filename)
-        
-        self.itensDaLista = {}
-
-        for line in self.arrExifList:
-            if(line):
-                # print('line=> ',line)
-                ## procurar grupo pelo indicador ']'
-                charNumGroup = line.find(']')    
-                group = line[1:charNumGroup]
-                
-                ## verificar se o grupo nao é de sistema
-                if not (group in ['ExifTool','System','File']):
+            for line in self.arrExifList:
+                if(line):
+                    # print('line=> ',line)
+                    ## procurar grupo pelo indicador ']'
+                    charNumGroup = line.find(']')    
+                    group = line[1:charNumGroup]
                     
-                    ## se no existe, add na lista
-                    if not group in self.itensDaLista:
-                        self.itensDaLista[group] = []
+                    ## verificar se o grupo nao é de sistema
+                    if not (group in ['ExifTool','System','File']):
                         
-                    obj = {}
-                
-                    charNum = line.find(':')
-                    sub1 = line[charNumGroup+1:charNum]
-                    sub1 = sub1.strip()
+                        ## se no existe, add na lista
+                        if not group in self.itensDaLista:
+                            self.itensDaLista[group] = []
+                            
+                        obj = {}
                     
-                    obj['tag'] = sub1;
-                    
-                    sub2 = line[charNum+1:]
-                    sub2 = sub2.strip()
-                    
-                    obj['string'] = sub2
-                    
-                    obj['status'] = 'original'
-                    
-                    #print(obj)                    
-                    
-                    self.itensDaLista[group].append(obj)
-                #end if grupo
-            #end if line
-        #end for
-        
-        print(self.itensDaLista[group])
-        
-        self.createScreen()        
+                        charNum = line.find(':')
+                        sub1 = line[charNumGroup+1:charNum]
+                        sub1 = sub1.strip()
+                        
+                        obj['tag'] = sub1;
+                        
+                        sub2 = line[charNum+1:]
+                        sub2 = sub2.strip()
+                        
+                        obj['string'] = sub2
+                        
+                        obj['status'] = 'original'
+                        
+                        #print(obj)                    
+                        
+                        self.itensDaLista[group].append(obj)
+                    #end if grupo
+                #end if line
+            #end for
+            
+            print(self.itensDaLista[group])
+            
+            self.createScreen()
+        #end if response
     #end def abrirArquivo
 
     def getExifInfoFromFile(self,theFile):
@@ -173,6 +176,7 @@ class MyMain(Gtk.Window):
         return ''
 
     def createScreen(self):
+        #TODO organize groups inside colapsable boxes        
         lineNum = 1;
         
         for group in self.itensDaLista:
@@ -280,18 +284,22 @@ class MyMain(Gtk.Window):
                 self.abrirArquivo(filename)
 
         fn.destroy()
+    #end def on_menu_file_open
 
     def on_menu_file_close(self, widget):
-        #TODO confirm close whiout save
+        response = True
         if(self.verifyUnsavedChanges()):
-            print "unsaved changes lost, because no confirm dialog yet"
-        
-        self.createGrid();
-        arquivoPdf = ''
-        #desativar botao fechar
-        self.botoes.btnClose.set_sensitive(False)
-        #desativar botao salvar
-        self.botoes.btnSave.set_sensitive(False)
+            response = self.confirmDialog("Unsaved changes","Unsaved changes on file will be lost 4 ever. U Sure?");
+            
+        if(response):
+            self.createGrid();
+            arquivoPdf = ''
+            #desativar botao fechar
+            self.botoes.btnClose.set_sensitive(False)
+            #desativar botao salvar
+            self.botoes.btnSave.set_sensitive(False)
+        #end if
+    #end def on_menu_file_close
 
     def verifyUnsavedChanges(self):
         for group in self.itensDaLista:
@@ -303,11 +311,37 @@ class MyMain(Gtk.Window):
             #end for group
         #end for groups
         return False 
+    #end def verifyUnsavedChanges
 
     def on_menu_file_save(self, widget):
         print("A File|Save menu item was selected.")
         #TODO not implemented yet
+        response = self.confirmDialog(self,"Overwrite?","Save changes on file?");
+        
+        if(response):
+            print "Ok saving tho"
+        else:
+            print "ok, not saving then"
+        
         print "NOP! I Wont Save, because reasons..."
+
+    def confirmDialog(self,title,text):
+        dialog = Gtk.Dialog(title, self, 
+                            None, (
+                                Gtk.STOCK_YES, Gtk.ResponseType.YES, 
+                                Gtk.STOCK_NO, Gtk.ResponseType.NO, 
+                                )
+                            )
+        dialog.get_content_area().add(Gtk.Label(text))
+        dialog.get_content_area().set_size_request(300, 100)
+        dialog.show_all()
+        response = dialog.run()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.YES:
+            return True
+        return False
+    #end def confirmDialog
 
     def on_menu_file_quit(self, widget):
         Gtk.main_quit()
